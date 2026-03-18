@@ -161,7 +161,7 @@ AS $$
   SELECT cp.id, cp.full_name, cp.phone, cp.email
   FROM client_profiles cp
   WHERE cp.organization_id = p_organization_id
-    AND cp.is_active = true
+    AND cp.is_blocked = false
     AND cp.id NOT IN (
       SELECT DISTINCT a.client_id
       FROM appointments a
@@ -187,7 +187,7 @@ AS $$
   SELECT cp.id, cp.full_name, cp.phone, cp.email
   FROM client_profiles cp
   WHERE cp.organization_id = p_organization_id
-    AND cp.is_active = true
+    AND cp.is_blocked = false
     AND cp.id NOT IN (
       SELECT DISTINCT a.client_id
       FROM appointments a

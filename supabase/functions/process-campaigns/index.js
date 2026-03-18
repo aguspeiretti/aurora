@@ -65,20 +65,18 @@ Deno.serve(async (req) => {
           audience = data || []
 
         } else if (campaign.audience_type === 'birthday_month') {
-          // Birthday filter entirely in DB — extract(month from birth_date) comparison
+          // Birthday filter entirely in DB using the `birthday` column (DATE)
+          const currentMonth = new Date().getMonth() + 1
           const { data, error: audErr } = await supabase
             .from('client_profiles')
-            .select('id, full_name, phone, email')
+            .select('id, full_name, phone, email, birthday')
             .eq('organization_id', campaign.organization_id)
-            .eq('is_active', true)
-            .not('birth_date', 'is', null)
-            .filter('birth_date', 'gte', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`)
-            .filter('birth_date', 'lte', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-31`)
+            .eq('is_blocked', false)
+            .not('birthday', 'is', null)
           if (audErr) throw audErr
-          // Secondary guard: same month regardless of year (birth_date stores MM-DD pattern)
-          const currentMonth = new Date().getMonth() + 1
+          // Filter by birth month in JS (avoids needing extract() via PostgREST)
           audience = (data || []).filter(c => {
-            const m = c.birth_date ? new Date(c.birth_date).getUTCMonth() + 1 : 0
+            const m = c.birthday ? new Date(c.birthday).getUTCMonth() + 1 : 0
             return m === currentMonth
           })
 
@@ -91,12 +89,12 @@ Deno.serve(async (req) => {
           audience = data || []
 
         } else {
-          // Default: all active clients
+          // Default: all non-blocked clients
           const { data, error: audErr } = await supabase
             .from('client_profiles')
             .select('id, full_name, phone, email')
             .eq('organization_id', campaign.organization_id)
-            .eq('is_active', true)
+            .eq('is_blocked', false)
           if (audErr) throw audErr
           audience = data || []
         }
