@@ -11,9 +11,16 @@ export function useClients({ search = '', page = 1, pageSize = 50 } = {}) {
   return useQuery({
     queryKey: [QUERY_KEY, currentOrg?.id, search, page],
     queryFn: async () => {
+      // Use exact count only on listing (no search term), to avoid heavy COUNT on every keystroke.
+      // While searching, use estimated count to reduce DB cost.
+      const countMode = search ? 'estimated' : 'exact'
+
       let query = supabase
         .from('client_profiles')
-        .select('*', { count: 'exact' })
+        .select(
+          'id, full_name, phone, email, total_visits, total_spent, last_visit_at, no_show_count',
+          { count: countMode }
+        )
         .eq('organization_id', currentOrg.id)
         .order('created_at', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1)
@@ -29,6 +36,7 @@ export function useClients({ search = '', page = 1, pageSize = 50 } = {}) {
       return { data: data || [], count: count || 0 }
     },
     enabled: !!currentOrg?.id,
+    placeholderData: (prev) => prev,
   })
 }
 

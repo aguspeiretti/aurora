@@ -86,39 +86,21 @@ export function PackagesPage() {
     enabled: !!detailPkg?.id,
   })
 
-  // ── Crear paquete ────────────────────────────────────────
+  // ── Crear paquete (atomic via RPC) ──────────────────────
   const { mutate: createPackage, isPending: creating } = useMutation({
     mutationFn: async (values) => {
-      const total = parseInt(values.total_sessions)
-
-      const { data: pkg, error } = await supabase
-        .from('treatment_packages')
-        .insert({
-          organization_id: currentOrg.id,
-          branch_id: currentBranch?.id || null,
-          client_id: values.client_id,
-          service_id: values.service_id || null,
-          name: values.name,
-          total_sessions: total,
-          used_sessions: 0,
-          total_price: values.total_price ? parseFloat(values.total_price) : null,
-          expires_at: values.expires_at || null,
-          notes: values.notes || null,
-          status: 'active',
-          starts_at: new Date().toISOString().slice(0, 10),
-        })
-        .select()
-        .single()
+      const { error } = await supabase.rpc('create_package_with_sessions', {
+        p_organization_id: currentOrg.id,
+        p_branch_id:       currentBranch?.id || null,
+        p_client_id:       values.client_id,
+        p_service_id:      values.service_id || null,
+        p_name:            values.name,
+        p_total_sessions:  parseInt(values.total_sessions),
+        p_total_price:     values.total_price ? parseFloat(values.total_price) : null,
+        p_expires_at:      values.expires_at || null,
+        p_notes:           values.notes || null,
+      })
       if (error) throw error
-
-      // Crear filas en package_sessions
-      const sessionRows = Array.from({ length: total }, (_, i) => ({
-        package_id: pkg.id,
-        session_number: i + 1,
-        status: 'available',
-      }))
-      const { error: sessErr } = await supabase.from('package_sessions').insert(sessionRows)
-      if (sessErr) throw sessErr
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['treatment_packages'] })
@@ -129,41 +111,24 @@ export function PackagesPage() {
     onError: err => toast.error('Error: ' + err.message),
   })
 
-  // ── Consumir sesión manualmente ──────────────────────────
+  // ── Consumir sesión manualmente (atomic via RPC) ─────────
   const { mutate: consumeSession, isPending: consuming } = useMutation({
     mutationFn: async (pkg) => {
-      // Primera sesión disponible
-      const nextSession = sessions.find(s => s.status === 'available')
-      if (!nextSession) throw new Error('No hay sesiones disponibles')
-
-      const { error: sErr } = await supabase
-        .from('package_sessions')
-        .update({ status: 'used', consumed_at: new Date().toISOString() })
-        .eq('id', nextSession.id)
-      if (sErr) throw sErr
-
-      const newUsed = pkg.used_sessions + 1
-      const { error: pErr } = await supabase
-        .from('treatment_packages')
-        .update({
-          used_sessions: newUsed,
-          ...(newUsed >= pkg.total_sessions ? { status: 'completed' } : {}),
-        })
-        .eq('id', pkg.id)
-      if (pErr) throw pErr
+      const { data, error } = await supabase.rpc('consume_package_session', {
+        p_package_id: pkg.id,
+      })
+      if (error) throw error
+      return data
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['treatment_packages'] })
       qc.invalidateQueries({ queryKey: ['package_sessions', detailPkg?.id] })
-      // Actualizar el pkg local para el modal
-      setDetailPkg(prev => {
-        const newUsed = prev.used_sessions + 1
-        return {
-          ...prev,
-          used_sessions: newUsed,
-          status: newUsed >= prev.total_sessions ? 'completed' : prev.status,
-        }
-      })
+      // Actualizar el pkg local para el modal usando los valores devueltos por el RPC
+      setDetailPkg(prev => ({
+        ...prev,
+        used_sessions: result.used_sessions,
+        status: result.status,
+      }))
       toast.success('Sesión registrada')
     },
     onError: err => toast.error(err.message),

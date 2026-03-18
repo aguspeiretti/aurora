@@ -52,56 +52,53 @@ Deno.serve(async (req) => {
           .update({ status: 'running', started_at: now })
           .eq('id', campaign.id)
 
-        // Build audience query based on audience_type
-        let clientQuery = supabase
-          .from('client_profiles')
-          .select('id, first_name, last_name, phone, email')
-          .eq('organization_id', campaign.organization_id)
-          .eq('is_active', true)
+        // Build audience using set-based SQL queries to avoid client-side filtering
+        let audience = []
 
         if (campaign.audience_type === 'inactive') {
-          // Clients with no appointment in the last 90 days
-          const cutoff = new Date()
-          cutoff.setDate(cutoff.getDate() - 90)
-          const { data: activeClientIds } = await supabase
-            .from('appointments')
-            .select('client_id')
-            .eq('organization_id', campaign.organization_id)
-            .gte('starts_at', cutoff.toISOString())
-            .not('status', 'in', '("cancelled","no_show")')
-          const activeIds = activeClientIds?.map(r => r.client_id) || []
-          if (activeIds.length > 0) {
-            clientQuery = clientQuery.not('id', 'in', `(${activeIds.join(',')})`)
-          }
-        } else if (campaign.audience_type === 'birthday_month') {
-          const currentMonth = new Date().getMonth() + 1
-          clientQuery = clientQuery.filter('birth_date', 'not.is', null)
-          // Filter by birth month via RPC or manual filter after fetching
-        } else if (campaign.audience_type === 'no_upcoming_booking') {
-          const { data: bookedClientIds } = await supabase
-            .from('appointments')
-            .select('client_id')
-            .eq('organization_id', campaign.organization_id)
-            .gte('starts_at', now)
-            .not('status', 'in', '("cancelled","no_show")')
-          const bookedIds = bookedClientIds?.map(r => r.client_id) || []
-          if (bookedIds.length > 0) {
-            clientQuery = clientQuery.not('id', 'in', `(${bookedIds.join(',')})`)
-          }
-        }
-
-        const { data: clients, error: clientErr } = await clientQuery
-        if (clientErr) throw clientErr
-
-        let audience = clients || []
-
-        // Post-filter for birthday_month
-        if (campaign.audience_type === 'birthday_month') {
-          const currentMonth = new Date().getMonth() + 1
-          audience = audience.filter(c => {
-            if (!c.birth_date) return false
-            return new Date(c.birth_date).getMonth() + 1 === currentMonth
+          // Clients with no attended appointment in the last 90 days — resolved in SQL
+          const { data, error: audErr } = await supabase.rpc('get_inactive_clients', {
+            p_organization_id: campaign.organization_id,
+            p_days_inactive:   90,
           })
+          if (audErr) throw audErr
+          audience = data || []
+
+        } else if (campaign.audience_type === 'birthday_month') {
+          // Birthday filter entirely in DB — extract(month from birth_date) comparison
+          const { data, error: audErr } = await supabase
+            .from('client_profiles')
+            .select('id, full_name, phone, email')
+            .eq('organization_id', campaign.organization_id)
+            .eq('is_active', true)
+            .not('birth_date', 'is', null)
+            .filter('birth_date', 'gte', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`)
+            .filter('birth_date', 'lte', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-31`)
+          if (audErr) throw audErr
+          // Secondary guard: same month regardless of year (birth_date stores MM-DD pattern)
+          const currentMonth = new Date().getMonth() + 1
+          audience = (data || []).filter(c => {
+            const m = c.birth_date ? new Date(c.birth_date).getUTCMonth() + 1 : 0
+            return m === currentMonth
+          })
+
+        } else if (campaign.audience_type === 'no_upcoming_booking') {
+          // Clients with no future confirmed appointment — resolved in SQL
+          const { data, error: audErr } = await supabase.rpc('get_clients_without_upcoming_booking', {
+            p_organization_id: campaign.organization_id,
+          })
+          if (audErr) throw audErr
+          audience = data || []
+
+        } else {
+          // Default: all active clients
+          const { data, error: audErr } = await supabase
+            .from('client_profiles')
+            .select('id, full_name, phone, email')
+            .eq('organization_id', campaign.organization_id)
+            .eq('is_active', true)
+          if (audErr) throw audErr
+          audience = data || []
         }
 
         // Check for already-delivered clients to avoid duplicates
@@ -118,7 +115,7 @@ Deno.serve(async (req) => {
 
         // Enqueue notification jobs and record deliveries
         const jobs = newAudience.map(client => {
-          const clientName = [client.first_name, client.last_name].filter(Boolean).join(' ')
+          const clientName = client.full_name || ''
           const body = messageBody.replace(/\{\{client_name\}\}/g, clientName)
 
           return {

@@ -34,7 +34,11 @@ export function OrganizationProvider({ children }) {
         .select(`
           role,
           active,
-          organization:organizations(*)
+          organization:organizations(
+            id, name, slug, logo_url, banner_url,
+            primary_color, secondary_color,
+            subscription_plan, subscription_status
+          )
         `)
         .eq('profile_id', user.id)
         .eq('active', true)
@@ -69,10 +73,10 @@ export function OrganizationProvider({ children }) {
     applyOrgTheme(org)
     localStorage.setItem('beauty_desk_org_id', org.id)
 
-    // Cargar sucursales
+    // Cargar sucursales — solo campos necesarios para el contexto global
     const { data: branchList } = await supabase
       .from('branches')
-      .select('*')
+      .select('id, name, slug, address, phone, active, online_booking_enabled, sort_order')
       .eq('organization_id', org.id)
       .eq('active', true)
       .order('sort_order')

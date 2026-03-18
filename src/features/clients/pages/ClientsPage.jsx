@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Users, Phone, Mail } from 'lucide-react'
 import { useClients } from '../hooks/useClients'
+import { useDebounce } from '@/lib/utils/useDebounce'
 import { Button } from '@/components/ui/Button'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -16,7 +17,8 @@ export function ClientsPage() {
   const [search, setSearch] = useState('')
   const [newModalOpen, setNewModalOpen] = useState(false)
 
-  const { data, isLoading } = useClients({ search })
+  const debouncedSearch = useDebounce(search, 350)
+  const { data, isLoading } = useClients({ search: debouncedSearch })
   const clients = data?.data || []
   const total = data?.count || 0
 

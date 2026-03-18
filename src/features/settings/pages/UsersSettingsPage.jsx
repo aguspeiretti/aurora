@@ -45,22 +45,16 @@ export function UsersSettingsPage() {
 
   const { mutate: inviteUser, isPending: isInviting } = useMutation({
     mutationFn: async ({ email, role }) => {
-      // Look up profile by email
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .single()
-      if (profileError || !profile) throw new Error('No existe un usuario con ese email')
-
-      const { error } = await supabase.from('organization_users').insert({
-        organization_id: currentOrg.id,
-        profile_id: profile.id,
-        role,
+      // Atomic: profile lookup + org_users insert in one SQL function
+      const { error } = await supabase.rpc('invite_org_user', {
+        p_email:           email,
+        p_organization_id: currentOrg.id,
+        p_role:            role,
       })
       if (error) {
         if (error.code === '23505') throw new Error('Este usuario ya es miembro')
-        throw error
+        // Surface the SQL RAISE EXCEPTION message directly
+        throw new Error(error.message)
       }
     },
     onSuccess: () => {

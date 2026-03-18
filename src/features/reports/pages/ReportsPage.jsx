@@ -22,36 +22,49 @@ export function ReportsPage() {
     ? endOfWeek(now, { weekStartsOn: 1 })
     : endOfMonth(now)
 
+  const branchId = currentBranch?.id
+
   const { data: metrics, isLoading } = useQuery({
-    queryKey: ['reports', currentOrg?.id, currentBranch?.id, period],
+    queryKey: ['reports', currentOrg?.id, branchId, period],
     queryFn: async () => {
+      const orgId = currentOrg.id
+      const from = dateFrom.toISOString()
+      const to = dateTo.toISOString()
+
       const [salesRes, appointmentsRes, newClientsRes] = await Promise.all([
         // Ventas del período
-        supabase.from('sales')
-          .select('id, total, sold_at, items:sale_items(item_type, line_total)')
-          .eq('organization_id', currentOrg.id)
-          .eq('payment_status', 'paid')
-          .gte('sold_at', dateFrom.toISOString())
-          .lte('sold_at', dateTo.toISOString()),
+        (() => {
+          let q = supabase.from('sales')
+            .select('id, total, sold_at')
+            .eq('organization_id', orgId)
+            .eq('payment_status', 'paid')
+            .gte('sold_at', from)
+            .lte('sold_at', to)
+          if (branchId) q = q.eq('branch_id', branchId)
+          return q
+        })(),
 
         // Turnos del período
-        supabase.from('appointments')
-          .select('id, status')
-          .eq('organization_id', currentOrg.id)
-          .gte('starts_at', dateFrom.toISOString())
-          .lte('starts_at', dateTo.toISOString()),
+        (() => {
+          let q = supabase.from('appointments')
+            .select('id, status')
+            .eq('organization_id', orgId)
+            .gte('starts_at', from)
+            .lte('starts_at', to)
+          if (branchId) q = q.eq('branch_id', branchId)
+          return q
+        })(),
 
-        // Nuevas clientas
+        // Nuevas clientas (no tiene branch_id directo, se filtra por org)
         supabase.from('client_profiles')
-          .select('id, full_name, created_at')
-          .eq('organization_id', currentOrg.id)
-          .gte('created_at', dateFrom.toISOString())
-          .lte('created_at', dateTo.toISOString()),
+          .select('id, created_at', { count: 'exact', head: true })
+          .eq('organization_id', orgId)
+          .gte('created_at', from)
+          .lte('created_at', to),
       ])
 
       const sales = salesRes.data || []
       const appointments = appointmentsRes.data || []
-      const newClients = newClientsRes.data || []
 
       const totalRevenue  = sales.reduce((s, v) => s + parseFloat(v.total), 0)
       const salesCount    = sales.length
@@ -67,7 +80,7 @@ export function ReportsPage() {
         salesCount,
         avgTicket,
         appointments: { total: totalAppts, completed, cancelled, noShows },
-        newClients: newClients.length,
+        newClients: newClientsRes.count || 0,
         topServices: [], // requiere join server-side
         recentSales: sales.slice(0, 10),
       }

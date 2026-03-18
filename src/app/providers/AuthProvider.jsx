@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const fetchProfile = useCallback(async (userId) => {
     const { data } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, email, avatar_url, is_super_admin')
       .eq('id', userId)
       .single()
     setProfile(data)

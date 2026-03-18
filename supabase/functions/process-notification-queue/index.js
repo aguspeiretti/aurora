@@ -142,11 +142,13 @@ Deno.serve(async (req) => {
           ? resolveTemplate(job.template.body, job.payload_json)
           : job.payload_json.body || ''
 
+        let usedProvider
         if (job.channel === 'whatsapp') {
           result = await sendWhatsApp({
             to: job.recipient_phone,
             body,
           }, config)
+          usedProvider = config.whatsappProvider
         } else if (job.channel === 'email') {
           result = await sendEmail({
             to: job.recipient_email,
@@ -155,16 +157,18 @@ Deno.serve(async (req) => {
               : 'Notificación BeautyDesk',
             html: body,
           }, config)
+          usedProvider = config.emailProvider
         } else {
           result = { success: false, error: `Unknown channel: ${job.channel}` }
+          usedProvider = 'unknown'
         }
 
-        // Actualizar job
+        // Actualizar job — guardar el provider real según canal
         await supabase
           .from('notification_jobs')
           .update({
             status: result.success ? 'sent' : 'failed',
-            provider: config.whatsappProvider,
+            provider: usedProvider,
             provider_message_id: result.messageId || null,
             last_error: result.error || null,
             retry_count: result.success ? job.retry_count : job.retry_count + 1,
