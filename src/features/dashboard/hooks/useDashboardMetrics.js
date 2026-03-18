@@ -78,6 +78,7 @@ export function useDashboardMetrics() {
             .select('id, name, expires_at, client:client_profiles(full_name), used_sessions, total_sessions')
             .eq('organization_id', orgId)
             .eq('status', 'active')
+            .gte('expires_at', format(now, 'yyyy-MM-dd'))
             .lte('expires_at', format(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'))
             .limit(5)
           if (branchId) q = q.eq('branch_id', branchId)

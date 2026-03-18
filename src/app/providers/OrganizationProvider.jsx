@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthContext } from './AuthProvider'
 
@@ -13,20 +13,9 @@ export function OrganizationProvider({ children }) {
   const [userRole, setUserRole] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!user) {
-      setOrganizations([])
-      setCurrentOrg(null)
-      setCurrentBranch(null)
-      setBranches([])
-      setUserRole(null)
-      setLoading(false)
-      return
-    }
-    loadUserOrganizations()
-  }, [user])
-
-  async function loadUserOrganizations() {
+  // Wrapped in useCallback so the reference is stable across renders and
+  // can be safely included in useEffect deps and exposed as `refetch` on context.
+  const loadUserOrganizations = useCallback(async () => {
     setLoading(true)
     try {
       const { data: orgUsers } = await supabase
@@ -60,7 +49,23 @@ export function OrganizationProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }
+  // selectOrganization is defined in the same render scope and only calls
+  // stable state-setters — intentionally omitted from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  useEffect(() => {
+    if (!user) {
+      setOrganizations([])
+      setCurrentOrg(null)
+      setCurrentBranch(null)
+      setBranches([])
+      setUserRole(null)
+      setLoading(false)
+      return
+    }
+    loadUserOrganizations()
+  }, [user, loadUserOrganizations])
 
   function applyOrgTheme(org) {
     const root = document.documentElement

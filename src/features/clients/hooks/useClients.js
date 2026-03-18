@@ -7,13 +7,16 @@ const QUERY_KEY = 'clients'
 
 export function useClients({ search = '', page = 1, pageSize = 50 } = {}) {
   const { currentOrg } = useOrgContext()
+  const normalizedSearch = search.trim()
 
   return useQuery({
-    queryKey: [QUERY_KEY, currentOrg?.id, search, page],
+    // pageSize included so that a change in page size correctly invalidates cache
+    queryKey: [QUERY_KEY, currentOrg?.id, normalizedSearch, page, pageSize],
     queryFn: async () => {
-      // Use exact count only on listing (no search term), to avoid heavy COUNT on every keystroke.
-      // While searching, use estimated count to reduce DB cost.
-      const countMode = search ? 'estimated' : 'exact'
+      // Exact count on plain listing; estimated during search to avoid a
+      // heavy COUNT scan on every keystroke. The UI shows result count
+      // separately when searching so the estimated value isn't surfaced.
+      const countMode = normalizedSearch ? 'estimated' : 'exact'
 
       let query = supabase
         .from('client_profiles')
@@ -25,9 +28,9 @@ export function useClients({ search = '', page = 1, pageSize = 50 } = {}) {
         .order('created_at', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1)
 
-      if (search) {
+      if (normalizedSearch) {
         query = query.or(
-          `full_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
+          `full_name.ilike.%${normalizedSearch}%,phone.ilike.%${normalizedSearch}%,email.ilike.%${normalizedSearch}%`
         )
       }
 
@@ -88,7 +91,7 @@ export function useClientSales(clientId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sales')
-        .select('*, items:sale_items(*), payments(*)')
+        .select('id, sold_at, total, payment_status, items:sale_items(description)')
         .eq('client_id', clientId)
         .order('sold_at', { ascending: false })
         .limit(30)

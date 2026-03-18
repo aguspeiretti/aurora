@@ -26,7 +26,7 @@ export function GiftCardsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('gift_cards')
-        .select('*, purchaser:client_profiles!purchaser_client_id(full_name)')
+        .select('id, code, recipient_name, status, current_balance, original_amount, expires_at, purchaser:client_profiles!purchaser_client_id(full_name)')
         .eq('organization_id', currentOrg.id)
         .order('issued_at', { ascending: false })
       if (error) throw error

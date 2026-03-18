@@ -28,10 +28,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch campaigns ready to run: scheduled_for is in the past (or null) and status is 'scheduled'
+    // Fetch campaigns ready to run
     const { data: campaigns, error: campErr } = await supabase
       .from('campaigns')
-      .select('*')
+      .select('id, name, organization_id, audience_type, channel, custom_message, sent_count, scheduled_for, status')
       .eq('status', 'scheduled')
       .in('organization_id', enterpriseOrgIds)
       .or(`scheduled_for.is.null,scheduled_for.lte.${now}`)
@@ -46,17 +46,25 @@ Deno.serve(async (req) => {
 
     for (const campaign of campaigns) {
       try {
-        // Mark campaign as running
-        await supabase
+        // Atomic claim: only proceed if the campaign is still 'scheduled'.
+        // This prevents two concurrent invocations from processing the same campaign.
+        const { data: claimed } = await supabase
           .from('campaigns')
           .update({ status: 'running', started_at: now })
           .eq('id', campaign.id)
+          .eq('status', 'scheduled') // guard
+          .select('id')
 
-        // Build audience using set-based SQL queries to avoid client-side filtering
+        if (!claimed || claimed.length === 0) {
+          // Another instance already claimed this campaign
+          console.log(`Campaign ${campaign.id}: skipped (already claimed)`)
+          continue
+        }
+
+        // Build audience using set-based SQL RPCs to avoid client-side filtering
         let audience = []
 
         if (campaign.audience_type === 'inactive') {
-          // Clients with no attended appointment in the last 90 days — resolved in SQL
           const { data, error: audErr } = await supabase.rpc('get_inactive_clients', {
             p_organization_id: campaign.organization_id,
             p_days_inactive:   90,
@@ -65,23 +73,15 @@ Deno.serve(async (req) => {
           audience = data || []
 
         } else if (campaign.audience_type === 'birthday_month') {
-          // Birthday filter entirely in DB using the `birthday` column (DATE)
-          const currentMonth = new Date().getMonth() + 1
-          const { data, error: audErr } = await supabase
-            .from('client_profiles')
-            .select('id, full_name, phone, email, birthday')
-            .eq('organization_id', campaign.organization_id)
-            .eq('is_blocked', false)
-            .not('birthday', 'is', null)
-          if (audErr) throw audErr
-          // Filter by birth month in JS (avoids needing extract() via PostgREST)
-          audience = (data || []).filter(c => {
-            const m = c.birthday ? new Date(c.birthday).getUTCMonth() + 1 : 0
-            return m === currentMonth
+          // Birthday month filter fully in SQL via the new RPC (avoids full-table JS filter)
+          const { data, error: audErr } = await supabase.rpc('get_birthday_month_clients', {
+            p_organization_id: campaign.organization_id,
+            p_month:           new Date().getMonth() + 1,
           })
+          if (audErr) throw audErr
+          audience = data || []
 
         } else if (campaign.audience_type === 'no_upcoming_booking') {
-          // Clients with no future confirmed appointment — resolved in SQL
           const { data, error: audErr } = await supabase.rpc('get_clients_without_upcoming_booking', {
             p_organization_id: campaign.organization_id,
           })
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
           audience = data || []
         }
 
-        // Check for already-delivered clients to avoid duplicates
+        // Exclude clients already delivered to (idempotency guard)
         const { data: existing } = await supabase
           .from('campaign_deliveries')
           .select('client_id')
@@ -108,39 +108,34 @@ Deno.serve(async (req) => {
 
         const newAudience = audience.filter(c => !deliveredIds.has(c.id))
 
-        // Resolve message template
         const messageBody = campaign.custom_message || ''
 
-        // Enqueue notification jobs and record deliveries
-        const jobs = newAudience.map(client => {
-          const clientName = client.full_name || ''
-          const body = messageBody.replace(/\{\{client_name\}\}/g, clientName)
+        if (newAudience.length > 0) {
+          const jobs = newAudience.map(client => {
+            const clientName = client.full_name || ''
+            return {
+              organization_id: campaign.organization_id,
+              event_type: 'campaign_message',
+              channel: campaign.channel,
+              recipient_name: clientName,
+              recipient_phone: client.phone,
+              recipient_email: client.email,
+              payload_json: {
+                body: messageBody.replace(/\{\{client_name\}\}/g, clientName),
+                campaign_id: campaign.id,
+                client_id: client.id,
+              },
+              status: 'pending',
+            }
+          })
 
-          return {
-            organization_id: campaign.organization_id,
-            event_type: 'campaign_message',
-            channel: campaign.channel,
-            recipient_name: clientName,
-            recipient_phone: client.phone,
-            recipient_email: client.email,
-            payload_json: {
-              body,
-              campaign_id: campaign.id,
-              client_id: client.id,
-            },
-            status: 'pending',
-          }
-        })
-
-        if (jobs.length > 0) {
           // Insert notification jobs in batches of 50
           for (let i = 0; i < jobs.length; i += 50) {
-            const batch = jobs.slice(i, i + 50)
-            const { error: jobErr } = await supabase.from('notification_jobs').insert(batch)
-            if (jobErr) console.error('Error inserting batch:', jobErr.message)
+            const { error: jobErr } = await supabase.from('notification_jobs').insert(jobs.slice(i, i + 50))
+            if (jobErr) console.error('Error inserting job batch:', jobErr.message)
           }
 
-          // Record campaign deliveries
+          // Record campaign deliveries for idempotency
           const deliveries = newAudience.map(client => ({
             campaign_id: campaign.id,
             client_id: client.id,
@@ -154,7 +149,7 @@ Deno.serve(async (req) => {
           totalEnqueued += jobs.length
         }
 
-        // Mark campaign as completed
+        // Mark campaign completed
         await supabase
           .from('campaigns')
           .update({
@@ -167,10 +162,10 @@ Deno.serve(async (req) => {
         console.log(`Campaign ${campaign.id} (${campaign.name}): enqueued ${newAudience.length} messages`)
       } catch (err) {
         console.error(`Campaign ${campaign.id} failed:`, err.message)
-        // Mark as draft on error so it can be retried
+        // Revert to 'scheduled' (not 'draft') so the cron retries on the next run
         await supabase
           .from('campaigns')
-          .update({ status: 'draft', error_message: err.message })
+          .update({ status: 'scheduled', error_message: err.message })
           .eq('id', campaign.id)
       }
     }

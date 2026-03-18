@@ -18,6 +18,7 @@ export function ClientsPage() {
   const [newModalOpen, setNewModalOpen] = useState(false)
 
   const debouncedSearch = useDebounce(search, 350)
+  const isSearching = debouncedSearch.trim().length > 0
   const { data, isLoading } = useClients({ search: debouncedSearch })
   const clients = data?.data || []
   const total = data?.count || 0
@@ -29,7 +30,11 @@ export function ClientsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Clientas</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {!isLoading && `${total} registradas`}
+            {!isLoading && (
+              isSearching
+                ? `${clients.length} resultado${clients.length !== 1 ? 's' : ''}`
+                : `${total} registradas`
+            )}
           </p>
         </div>
         <Button onClick={() => setNewModalOpen(true)}>

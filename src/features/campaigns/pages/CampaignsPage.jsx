@@ -30,7 +30,7 @@ export function CampaignsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('campaigns')
-        .select('*, created_by_profile:profiles!created_by(full_name)')
+        .select('id, name, channel, audience_type, status, sent_count, created_at, created_by_profile:profiles!created_by(full_name)')
         .eq('organization_id', currentOrg.id)
         .order('created_at', { ascending: false })
       if (error) throw error

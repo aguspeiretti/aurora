@@ -13,7 +13,7 @@ export function useServiceCategories() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('service_categories')
-        .select('*')
+        .select('id, name, slug, type, color, icon, sort_order')
         .eq('organization_id', currentOrg.id)
         .eq('active', true)
         .order('sort_order')

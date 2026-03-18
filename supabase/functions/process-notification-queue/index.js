@@ -106,17 +106,18 @@ Deno.serve(async (req) => {
       emailFromName: Deno.env.get('EMAIL_FROM_NAME') || 'BeautyDesk',
     }
 
-    // Obtener jobs pendientes cuyo scheduled_for ya pasó
+    // Fetch pending jobs whose scheduled_for has passed.
+    // max_retries is checked per-job in the loop (PostgREST can't compare two columns).
     const { data: jobs, error: fetchError } = await supabase
       .from('notification_jobs')
       .select(`
-        *,
+        id, channel, event_type, recipient_name, recipient_phone, recipient_email,
+        payload_json, retry_count, max_retries, provider,
         template:message_templates(channel, body, subject),
         client:client_profiles(full_name, phone, email)
       `)
       .eq('status', 'pending')
       .lte('scheduled_for', new Date().toISOString())
-      .lt('retry_count', 3)
       .limit(BATCH_SIZE)
       .order('scheduled_for')
 
@@ -130,11 +131,31 @@ Deno.serve(async (req) => {
     let processed = 0, errors = 0
 
     for (const job of jobs) {
-      // Marcar como en procesamiento
-      await supabase
+      // Respect per-job max_retries (default 3 if missing)
+      const maxRetries = job.max_retries ?? 3
+      if (job.retry_count >= maxRetries) {
+        // Mark permanently failed and skip — shouldn't normally reach here
+        await supabase
+          .from('notification_jobs')
+          .update({ status: 'failed', last_error: 'max_retries exceeded' })
+          .eq('id', job.id)
+        errors++
+        continue
+      }
+
+      // Atomic claim: only proceed if the job is still 'pending'.
+      // Prevents two concurrent invocations from processing the same job.
+      const { data: claimed } = await supabase
         .from('notification_jobs')
-        .update({ status: 'processing', processed_at: new Date().toISOString() })
+        .update({ status: 'processing' })
         .eq('id', job.id)
+        .eq('status', 'pending') // guard
+        .select('id')
+
+      if (!claimed || claimed.length === 0) {
+        // Another worker already claimed this job
+        continue
+      }
 
       let result
       try {
@@ -144,10 +165,7 @@ Deno.serve(async (req) => {
 
         let usedProvider
         if (job.channel === 'whatsapp') {
-          result = await sendWhatsApp({
-            to: job.recipient_phone,
-            body,
-          }, config)
+          result = await sendWhatsApp({ to: job.recipient_phone, body }, config)
           usedProvider = config.whatsappProvider
         } else if (job.channel === 'email') {
           result = await sendEmail({
@@ -163,7 +181,8 @@ Deno.serve(async (req) => {
           usedProvider = 'unknown'
         }
 
-        // Actualizar job — guardar el provider real según canal
+        const doneAt = new Date().toISOString()
+
         await supabase
           .from('notification_jobs')
           .update({
@@ -171,17 +190,17 @@ Deno.serve(async (req) => {
             provider: usedProvider,
             provider_message_id: result.messageId || null,
             last_error: result.error || null,
+            processed_at: doneAt,
             retry_count: result.success ? job.retry_count : job.retry_count + 1,
           })
           .eq('id', job.id)
 
-        // Log
         await supabase.from('notification_logs').insert({
           job_id: job.id,
           status: result.success ? 'sent' : 'failed',
           provider_response: result.raw || null,
           error_message: result.error || null,
-          sent_at: result.success ? new Date().toISOString() : null,
+          sent_at: result.success ? doneAt : null,
         })
 
         if (result.success) processed++
@@ -192,6 +211,7 @@ Deno.serve(async (req) => {
           .update({
             status: 'failed',
             last_error: err.message,
+            processed_at: new Date().toISOString(),
             retry_count: job.retry_count + 1,
           })
           .eq('id', job.id)
