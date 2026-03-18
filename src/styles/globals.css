@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-primary: #a87030;
+    --brand-secondary: #2d7a5f;
+    --brand-blush: #c4856a;
+    --sidebar-width: 256px;
+    --cream: #F5EFE6;
+  }
+
+  body {
+    @apply antialiased text-gray-900;
+    background-color: #f9f5ef;
+    font-family: 'Outfit', system-ui, sans-serif;
+  }
+
+  /* Scrollbar estilizada */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-gray-900;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-amber-100/60 p-4 sm:p-6;
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm
+           placeholder:text-gray-400 focus:outline-none
+           focus:border-transparent transition-all disabled:bg-gray-50 disabled:text-gray-500;
+    &:focus {
+      box-shadow: 0 0 0 2px var(--brand-primary, #a87030);
+    }
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+           text-sm font-medium text-white focus:outline-none
+           focus:ring-offset-2 active:scale-[0.98] transition-all
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--brand-primary, #a87030);
+    &:hover { filter: brightness(0.88); }
+    &:focus { box-shadow: 0 0 0 2px var(--brand-primary, #a87030); }
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200
+           bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50
+           focus:outline-none focus:ring-offset-2
+           active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+    &:focus { box-shadow: 0 0 0 2px var(--brand-primary, #a87030); }
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5
+           text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2
+           focus:ring-red-400 focus:ring-offset-2 active:scale-[0.98] transition-all
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .badge-base {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* Calendar overrides */
+  .rbc-calendar {
+    @apply font-sans text-sm;
+  }
+
+  .rbc-header {
+    @apply text-xs font-semibold uppercase text-gray-500 border-gray-100 py-2;
+  }
+
+  .rbc-today {
+    @apply bg-brand-50;
+  }
+
+  .rbc-event {
+    @apply rounded-lg text-xs font-medium border-0 px-2 py-1;
+  }
+
+  .rbc-toolbar button {
+    @apply text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50;
+  }
+
+  .rbc-toolbar button.rbc-active {
+    border-color: var(--brand-primary, #a87030);
+    color: var(--brand-primary, #a87030);
+    background-color: color-mix(in srgb, var(--brand-primary, #a87030) 10%, white);
+  }
+}
