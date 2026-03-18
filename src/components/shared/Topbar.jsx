@@ -62,7 +62,19 @@ export function Topbar({ onMenuClick }) {
       <div className="flex items-center gap-2 ml-auto">
         <BranchSwitcher />
 
-        {/* Portal cliente */}
+        {/* Portal cliente — mobile: solo ícono */}
+        {bookingUrl && (
+          <button
+            onClick={copyBookingLink}
+            title="Copiar link para clientes"
+            className="sm:hidden p-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+            style={{ color: copied ? '#16a34a' : '#6b7280' }}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+          </button>
+        )}
+
+        {/* Portal cliente — desktop: link + botón */}
         {bookingUrl && (
           <div className="hidden sm:flex items-center rounded-xl border border-gray-200 overflow-hidden">
             <a
