@@ -437,7 +437,7 @@ INSERT INTO sales (
 
 INSERT INTO payments (sale_id, method, amount, status, paid_at)
 VALUES
-  (sale2_id, 'card',     135000.00, 'paid', NOW() - INTERVAL '30 days'),
+  (sale2_id, 'credit_card', 135000.00, 'paid', NOW() - INTERVAL '30 days'),
   (sale3_id, 'cash',      20000.00, 'paid', NOW() - INTERVAL '30 days')
 ON CONFLICT DO NOTHING;
 
@@ -492,11 +492,11 @@ INSERT INTO treatment_packages (
 INSERT INTO package_sessions (package_id, appointment_id, session_number, consumed_at, status, notes)
 VALUES
   -- Sesión 1 — usada (turno hace ~45 días, solo axilas con mismo técnico - conceptual)
-  (package1_id, appt3_id,  1, NOW() - INTERVAL '45 days', 'consumed', 'Primera sesión. Parámetros iniciales. Sin reacciones.'),
+  (package1_id, appt3_id,  1, NOW() - INTERVAL '45 days', 'used', 'Primera sesión. Parámetros iniciales. Sin reacciones.'),
   -- Sesión 2 — usada (turno hace 7 días)
-  (package1_id, appt5_id,  2, NOW() - INTERVAL '7 days',  'consumed', 'Segunda sesión. Fluencia aumentada. Buena respuesta.'),
+  (package1_id, appt5_id,  2, NOW() - INTERVAL '7 days',  'used', 'Segunda sesión. Fluencia aumentada. Buena respuesta.'),
   -- Sesión 3 — próxima (turno en 14 días)
-  (package1_id, appt7_id,  3, NULL,                        'booked',   'Turno reservado.'),
+  (package1_id, appt7_id,  3, NULL,                        'available',   'Turno reservado.'),
   -- Sesiones 4-10 — disponibles
   (package1_id, NULL,      4, NULL, 'available', NULL),
   (package1_id, NULL,      5, NULL, 'available', NULL),
