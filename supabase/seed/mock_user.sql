@@ -18,6 +18,8 @@ DECLARE
   branch2_id      UUID := '22222222-2222-2222-2222-222222222222';
   owner_id        UUID := '33333333-3333-3333-3333-333333333331';
   manager_id      UUID := '33333333-3333-3333-3333-333333333332';
+  tech1_id        UUID := '33333333-3333-3333-3333-333333333334';
+  tech2_id        UUID := '33333333-3333-3333-3333-333333333335';
   staff_owner_id  UUID := '44444444-4444-4444-4444-444444444441';
   staff_mgr_id    UUID := '44444444-4444-4444-4444-444444444442';
   staff_tech1_id  UUID := '44444444-4444-4444-4444-444444444443';
@@ -159,11 +161,11 @@ VALUES
    'Isabella llegó recomendada por Carla Pérez (clienta VIP). Primera visita fue para Soft Gel, quedó muy contenta. Diseño: francés degradado. Foto tomada. Prometió volver en 35 días.',
    true, NOW() - INTERVAL '90 days'),
 
-  (mock_client_id, staff_mgr_id,
+  (mock_client_id, manager_id,
    'Realizamos limpieza facial profunda. Piel mixta con tendencia a deshidratación en pómulos. Buena tolerancia a vapor. Aplicamos mascarilla de ácido hialurónico. Recomendé rutina de hidratación en casa con sérum de vitamina C.',
    false, NOW() - INTERVAL '60 days'),
 
-  (mock_client_id, staff_tech1_id,
+  (mock_client_id, tech1_id,
    'Inicio de paquete de depilación láser piernas completas (10 sesiones). Fototipo II, vello oscuro fino. Parámetros: fluencia 25 J/cm², ancho de pulso 30ms. Sin reacciones adversas. Próxima sesión en 45 días.',
    false, NOW() - INTERVAL '45 days'),
 
@@ -171,7 +173,7 @@ VALUES
    'Isabella compró gift card de $20.000 para regalar a su mamá en su cumpleaños. Solicita que se imprima en sobre personalizado. Gift card activa, sin uso aún.',
    false, NOW() - INTERVAL '30 days'),
 
-  (mock_client_id, staff_tech1_id,
+  (mock_client_id, tech1_id,
    'Sesión 2 de paquete láser piernas: excelente respuesta. Reducción visible aprox 30%. Parámetros ajustados: fluencia 28 J/cm². Sin efectos secundarios. Se ven 2-3 sesiones más para zona del muslo.',
    false, NOW() - INTERVAL '7 days');
 
@@ -279,7 +281,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO appointment_status_history (appointment_id, from_status, to_status, changed_by)
 VALUES
   (appt3_id, 'pending', 'confirmed', owner_id),
-  (appt3_id, 'confirmed', 'completed', staff_tech1_id);
+  (appt3_id, 'confirmed', 'completed', tech1_id);
 
 -- Turno 4: Kapping con Esmaltado (hace 30 días) — completado
 INSERT INTO appointments (
@@ -320,7 +322,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO appointment_status_history (appointment_id, from_status, to_status, changed_by)
 VALUES
-  (appt5_id, 'confirmed', 'completed', staff_tech1_id);
+  (appt5_id, 'confirmed', 'completed', tech1_id);
 
 -- Turno 6: No-show — Masaje Descontracturante (hace 45 días)
 INSERT INTO appointments (
