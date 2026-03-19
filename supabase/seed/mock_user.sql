@@ -128,7 +128,9 @@ INSERT INTO client_profiles (
   NOW() - INTERVAL '7 days',
   NOW() + INTERVAL '3 days',
   staff_owner_id,   -- profesional preferida: Valentina (uñas)
-  branch1_id        -- sucursal preferida: Palermo
+  branch1_id,       -- sucursal preferida: Palermo
+  false,
+  NULL
 ) ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
